@@ -1,0 +1,14 @@
+node_modules
+dist
+.vite
+*.local
+.DS_Store
+test-results
+playwright-report
+*.log
+
+# 本机的 AI 助手工作记录，不属于项目源码
+.workbuddy-ai/
+
+# 视觉 / 响应式走查生成的截图，可用 scripts/ 里的脚本重新生成
+outputs/

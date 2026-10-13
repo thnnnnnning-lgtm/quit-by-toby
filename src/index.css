@@ -1,0 +1,581 @@
+@import "tailwindcss";
+
+/*
+ * 设计令牌：手绘日记本风格。
+ *
+ * 米白底 + 深墨手绘描边 + 低饱和淡彩点缀（淡蓝 / 淡绿 / 淡黄 / 淡粉）。
+ * 取消蓝白灰办公软件风格，也不使用标准企业管理后台式的卡片。
+ * 颜色只用于插画底色、选中态和小装饰，不铺满屏幕，文字始终保持清晰对比。
+ */
+@theme {
+  /* 背景与表面 */
+  --color-bg: #fffefb;
+  --color-surface: #ffffff;
+  --color-paper: #fffdf7;
+  --color-fill: #f7f4ec;
+  --color-fill-2: #f2eee4;
+
+  /* 描边与文字：次要文字在建议色 #817D75 基础上略微加深，保证小字号也够清晰 */
+  --color-stroke: #292824;
+  --color-ink: #292824;
+  --color-body: #484640;
+  --color-muted: #6f6a62;
+  --color-faint: #857f77;
+
+  /* 线条：主区块用深墨描边，次级区块用暖灰细线，形成轻重层次 */
+  --color-line: #e2ddd1;
+  --color-line-soft: #efebe1;
+
+  /* 主按钮：淡黄底 + 深墨描边 + 深墨文字 */
+  --color-primary: #292824;
+  --color-primary-soft: #fff0d0;
+  --color-primary-hover: #ffe9bd;
+
+  /* 低饱和淡彩：只做点缀 */
+  --color-accent-blue: #ddeeff;
+  --color-accent-green: #e7f0ce;
+  --color-accent-yellow: #fff0d0;
+  --color-accent-pink: #f9ded5;
+  --color-accent-orange: #ffe7ce;
+  --color-accent-purple: #e7ddf4;
+  --color-accent-greyblue: #dce3ea;
+
+  /* 语义色：同样保持低饱和，但文字对比足够 */
+  --color-success: #4c7a34;
+  --color-success-soft: #e7f0ce;
+  --color-warning: #9c6a1f;
+  --color-warning-soft: #fff0d0;
+  --color-danger: #b8533d;
+  --color-danger-soft: #f9ded5;
+
+  --font-sans:
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  /* 手写体只用于短标题与装饰文字，正文、表单、报告一律用无衬线体 */
+  --font-hand:
+    "Kaiti SC", "STKaiti", "KaiTi", "Yuanti SC", "Hiragino Sans GB",
+    "PingFang SC", sans-serif;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    font-family: var(--font-sans);
+    background: var(--color-bg);
+    color: var(--color-body);
+    margin: 0;
+    line-height: 1.6;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 {
+    font-family: var(--font-hand);
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--color-ink);
+    letter-spacing: 0.01em;
+  }
+  h2 {
+    font-family: var(--font-hand);
+    font-size: 1.0625rem;
+    font-weight: 600;
+    color: var(--color-ink);
+    letter-spacing: 0.01em;
+  }
+  h3 {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--color-ink);
+  }
+  /* 手绘线条在任何尺寸下都保持同一线宽 */
+  .doodle,
+  .doodle * {
+    vector-effect: non-scaling-stroke;
+  }
+}
+
+@layer components {
+  /* 内容区：移动端底部为固定导航 + 悬浮输入框预留空间 */
+  .page {
+    @apply mx-auto w-full max-w-[1080px] px-4 pt-4 md:px-6 md:py-6;
+    padding-bottom: calc(8rem + env(safe-area-inset-bottom, 0px));
+  }
+  @media (min-width: 768px) {
+    .page {
+      padding-bottom: 2rem;
+    }
+  }
+  /* 每日记录需要「主内容 + 右侧摘要」两列 */
+  .page-wide {
+    @apply mx-auto w-full max-w-[1240px] px-4 pt-4 md:px-6 md:py-6;
+    padding-bottom: calc(8rem + env(safe-area-inset-bottom, 0px));
+  }
+  @media (min-width: 768px) {
+    .page-wide {
+      padding-bottom: 2rem;
+    }
+  }
+
+  /*
+   * 主区块：白底 + 深墨描边 + 略不规则的圆角，不投影。
+   * 圆角用四个角不同的半径做出手绘感，但卡片本身不倾斜，文字保持对齐。
+   */
+  .panel {
+    @apply bg-[var(--color-surface)] p-4;
+    border: 1.6px solid var(--color-stroke);
+    border-radius: 15px 13px 16px 12px / 13px 16px 12px 15px;
+  }
+  /* 次级区块与列表项：暖灰细线，避免整页都是黑框 */
+  .card,
+  .panel-flat {
+    @apply bg-[var(--color-surface)] p-4;
+    border: 1.3px solid var(--color-line);
+    border-radius: 13px 11px 14px 11px / 11px 14px 11px 13px;
+  }
+  .section {
+    @apply border-b border-[var(--color-line-soft)] pb-3;
+  }
+  .divider {
+    @apply border-t border-[var(--color-line-soft)];
+  }
+
+  .stack {
+    @apply flex flex-col gap-3;
+  }
+  .stack-sm {
+    @apply flex flex-col gap-1.5;
+  }
+  .grid-2 {
+    @apply grid grid-cols-1 gap-3 sm:grid-cols-2;
+  }
+  .grid-4 {
+    @apply grid grid-cols-2 gap-3 md:grid-cols-4;
+  }
+  .muted {
+    color: var(--color-muted);
+    @apply text-sm;
+  }
+  .faint {
+    color: var(--color-faint);
+    @apply text-xs;
+  }
+  .small {
+    @apply text-xs;
+  }
+  .hand {
+    font-family: var(--font-hand);
+  }
+
+  /* 控件：统一高度、同一套略不规则圆角 */
+  .btn {
+    @apply inline-flex min-h-10 cursor-pointer items-center justify-center gap-1.5 px-3.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-45;
+    border: 1.5px solid transparent;
+    border-radius: 11px 9px 12px 9px / 9px 12px 9px 11px;
+  }
+  .btn-primary {
+    @apply inline-flex min-h-10 cursor-pointer items-center justify-center gap-1.5 px-3.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-45;
+    border: 1.5px solid var(--color-stroke);
+    border-radius: 11px 9px 12px 9px / 9px 12px 9px 11px;
+    background: var(--color-primary-soft);
+    color: var(--color-ink);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--color-primary-hover);
+  }
+  .btn-secondary {
+    @apply inline-flex min-h-10 cursor-pointer items-center justify-center gap-1.5 px-3.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-45;
+    border: 1.4px solid var(--color-stroke);
+    border-radius: 11px 9px 12px 9px / 9px 12px 9px 11px;
+    background: var(--color-surface);
+    color: var(--color-ink);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--color-fill);
+  }
+  .btn-ghost {
+    @apply inline-flex min-h-10 cursor-pointer items-center justify-center gap-1.5 px-3.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-45;
+    border: 1.4px solid transparent;
+    border-radius: 11px 9px 12px 9px / 9px 12px 9px 11px;
+    background: transparent;
+    color: var(--color-muted);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--color-fill);
+    color: var(--color-ink);
+  }
+  .btn-danger {
+    @apply inline-flex min-h-10 cursor-pointer items-center justify-center gap-1.5 px-3.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-45;
+    border: 1.5px solid var(--color-stroke);
+    border-radius: 11px 9px 12px 9px / 9px 12px 9px 11px;
+    background: var(--color-danger-soft);
+    color: var(--color-danger);
+  }
+  .btn-danger:hover:not(:disabled) {
+    filter: brightness(0.97);
+  }
+  .btn-sm {
+    @apply min-h-8 px-2.5 text-xs;
+  }
+  .button-row {
+    @apply flex flex-wrap gap-2;
+  }
+  .field {
+    @apply flex flex-col gap-1.5 text-sm;
+  }
+  .input {
+    @apply min-h-10 w-full bg-[var(--color-surface)] px-3 py-2 text-sm outline-none placeholder:text-[var(--color-faint)] focus:border-[var(--color-stroke)];
+    border: 1.3px solid var(--color-line);
+    border-radius: 10px 9px 11px 9px / 9px 11px 9px 10px;
+    color: var(--color-ink);
+  }
+  .form-grid {
+    @apply grid grid-cols-1 gap-4 sm:grid-cols-2;
+  }
+  .chip {
+    @apply inline-flex min-h-8 cursor-pointer items-center gap-1 px-3 text-sm transition;
+    border: 1.3px solid var(--color-line);
+    border-radius: 10px 8px 11px 8px / 8px 11px 8px 10px;
+    background: var(--color-surface);
+    color: var(--color-body);
+  }
+  .chip:hover {
+    border-color: var(--color-stroke);
+    color: var(--color-ink);
+  }
+  .chip-active {
+    border: 1.4px solid var(--color-stroke);
+    background: var(--color-accent-blue);
+    color: var(--color-ink);
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-medium;
+    border-radius: 6px 5px 7px 5px / 5px 7px 5px 6px;
+  }
+  .notice {
+    @apply bg-[var(--color-fill)] p-3 text-sm leading-relaxed;
+    border: 1.3px solid var(--color-line);
+    border-radius: 12px 10px 13px 10px / 10px 13px 10px 12px;
+    color: var(--color-body);
+  }
+  .error {
+    @apply bg-[var(--color-danger-soft)] p-3 text-sm;
+    border: 1.4px solid var(--color-danger);
+    border-radius: 12px 10px 13px 10px / 10px 13px 10px 12px;
+    color: var(--color-danger);
+  }
+  .success {
+    @apply bg-[var(--color-success-soft)] p-3 text-sm;
+    border: 1.4px solid var(--color-success);
+    border-radius: 12px 10px 13px 10px / 10px 13px 10px 12px;
+    color: var(--color-ink);
+  }
+  .tabs {
+    @apply flex flex-wrap gap-2;
+  }
+  .tab {
+    @apply cursor-pointer px-3 py-1.5 text-sm transition;
+    border: 1.3px solid transparent;
+    border-radius: 11px 9px 12px 9px / 9px 12px 9px 11px;
+    color: var(--color-muted);
+  }
+  .tab:hover {
+    color: var(--color-ink);
+  }
+  /* 选中态用淡色底 + 细描边，不用下划线 */
+  .tab-active {
+    border-color: var(--color-stroke);
+    background: var(--color-accent-blue);
+    color: var(--color-ink);
+    font-weight: 500;
+  }
+  .list-row {
+    @apply flex items-start justify-between gap-3 bg-[var(--color-surface)] p-3 transition;
+    border: 1.3px solid var(--color-line);
+    border-radius: 12px 10px 13px 10px / 10px 13px 10px 12px;
+  }
+  .list-row:hover {
+    border-color: var(--color-stroke);
+  }
+  .label {
+    @apply text-sm font-medium text-[var(--color-ink)];
+  }
+  .kbd-focus:focus-visible {
+    outline: 2px solid var(--color-stroke);
+    outline-offset: 2px;
+  }
+  .th {
+    @apply border border-[var(--color-line)] bg-[var(--color-fill)] p-2 text-left align-top font-semibold;
+  }
+  .td {
+    @apply border border-[var(--color-line)] p-2 text-left align-top;
+  }
+
+  /* 对话气泡：淡色底 + 细描边，长文本优先可读，不加粗黑框 */
+  .bubble-user {
+    @apply self-end px-3 py-2 text-sm;
+    border: 1.4px solid var(--color-stroke);
+    border-radius: 14px 12px 4px 12px / 12px 14px 4px 12px;
+    background: var(--color-accent-blue);
+    color: var(--color-ink);
+  }
+  .bubble-assistant {
+    @apply self-start px-3 py-2 text-sm;
+    border: 1.3px solid var(--color-line);
+    border-radius: 12px 14px 12px 4px / 14px 12px 12px 4px;
+    background: var(--color-surface);
+    color: var(--color-body);
+  }
+  /* 对话与记录里的结构化卡片 */
+  .inline-card {
+    @apply w-full bg-[var(--color-surface)] p-3;
+    border: 1.3px solid var(--color-line);
+    border-radius: 13px 11px 14px 11px / 11px 14px 11px 13px;
+  }
+  /* 值得及时关注的变化：左侧一道深墨，表示「重」 */
+  .inline-card-accent {
+    border-left-width: 4px;
+    border-left-color: var(--color-stroke);
+    background: var(--color-accent-yellow);
+  }
+  /* 时间敏感事项：保持醒目，不被可爱插画削弱 */
+  .inline-card-alert {
+    border: 1.7px solid var(--color-stroke);
+    background: var(--color-accent-pink);
+  }
+  /* 便利贴：每日留痕建议 */
+  .note {
+    @apply relative bg-[var(--color-accent-yellow)] p-3 pt-4;
+    border: 1.5px solid var(--color-stroke);
+    border-radius: 13px 11px 14px 11px / 11px 14px 11px 13px;
+  }
+  .note::before {
+    content: "";
+    position: absolute;
+    top: -0.45rem;
+    left: 1rem;
+    width: 2.9rem;
+    height: 0.85rem;
+    background: rgba(221, 238, 255, 0.9);
+    border: 1.2px solid var(--color-stroke);
+    border-radius: 3px;
+    transform: rotate(-2.5deg);
+  }
+  .note-blue {
+    background: var(--color-accent-blue);
+  }
+  .note-pink {
+    background: var(--color-accent-pink);
+  }
+  .note-green {
+    background: var(--color-accent-green);
+  }
+
+  /* 方格纸底纹：只做背景，不影响日期与表情的可读性 */
+  .paper-grid {
+    background-color: var(--color-surface);
+    background-image:
+      linear-gradient(to right, rgba(41, 40, 36, 0.055) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(41, 40, 36, 0.055) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+
+  /* 顶部插画容器：占移动端首屏约 20%–25%，不挡主要操作 */
+  .hero-scene {
+    @apply flex items-end justify-center;
+  }
+  .hero-scene svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  /* 情绪日历：格子之间没有明显边框，靠留白分隔 */
+  .mood-cell {
+    @apply flex flex-col items-center justify-start gap-0.5 bg-transparent p-1 transition;
+    border: 1.3px solid transparent;
+    border-radius: 12px 10px 13px 10px / 10px 13px 10px 12px;
+  }
+  .mood-cell:hover:not(:disabled) {
+    border-color: var(--color-line);
+    background: var(--color-paper);
+  }
+  .mood-cell-today {
+    border-color: var(--color-stroke);
+    background: var(--color-surface);
+  }
+
+  /*
+   * 对话输入框：移动端吸附在底部导航之上，键盘弹出时仍可见，且不与导航重叠。
+   * 3.5rem 是底部导航的高度。
+   */
+  .composer-dock {
+    position: sticky;
+    bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+    z-index: 20;
+    background: var(--color-bg);
+    padding-top: 0.5rem;
+  }
+  @media (min-width: 768px) {
+    .composer-dock {
+      bottom: 0;
+    }
+  }
+}
+
+/* 快速打卡弹窗：遮罩淡入、卡片轻轻弹起（一次性，不做持续动画） */
+@keyframes overlay-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.animate-overlay {
+  animation: overlay-fade 200ms ease-out both;
+}
+@keyframes modal-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97) rotate(-0.4deg);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.005) rotate(0.2deg);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-modal {
+  animation: modal-pop 330ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+/* 心情选项依次浮起（配合 animationDelay 做出错落感） */
+@keyframes mood-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-mood-rise {
+  animation: mood-rise 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+/* 选中心情时的小弹跳 */
+@keyframes mood-bounce {
+  0% {
+    transform: scale(0.88);
+  }
+  55% {
+    transform: scale(1.14);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.animate-mood-bounce {
+  animation: mood-bounce 380ms ease-out both;
+}
+/* 保存成功的星星：从中心散开 */
+@keyframes sparkle-fly {
+  from {
+    opacity: 1;
+    transform: translate(0, 0) scale(0.5) rotate(0deg);
+  }
+  to {
+    opacity: 0;
+    transform: translate(var(--dx, 0), var(--dy, 0)) scale(1.05) rotate(40deg);
+  }
+}
+.animate-sparkle {
+  animation: sparkle-fly 720ms ease-out both;
+}
+
+/* 反馈动效：只做一次性轻微动作，不持续抖动或弹跳 */
+@keyframes doodle-pop {
+  0% {
+    transform: scale(0.88) rotate(-3deg);
+  }
+  60% {
+    transform: scale(1.05) rotate(1.5deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+.animate-pop {
+  animation: doodle-pop 420ms ease-out both;
+}
+@keyframes doodle-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-rise {
+  animation: doodle-rise 240ms ease-out both;
+}
+
+/*
+ * 触屏可点区域：只在移动端把偏小的按钮撑到 44px（iOS HIG 的建议值）。
+ * 桌面端用鼠标，精度足够，保持原来的紧凑版式。
+ * 这些规则故意写在 @layer 之外，否则会被 Tailwind 的 h-* / p-* 工具类覆盖。
+ */
+@media (max-width: 767px) {
+  .tap {
+    min-height: 44px;
+  }
+  .tap-square {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/*
+ * 矮屏（横屏手机、矮窗口）：顶部插画压到 110px。
+ * 竖屏手机高度足够，仍然用 170px / 190px，不受影响。
+ */
+@media (max-height: 480px) {
+  .hero-scene {
+    height: 110px;
+  }
+}
+
+/* 尊重系统的「减少动态效果」偏好 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+  }
+  .card,
+  .panel {
+    border: none;
+    page-break-inside: avoid;
+  }
+  .print-table {
+    width: 100%;
+  }
+}
