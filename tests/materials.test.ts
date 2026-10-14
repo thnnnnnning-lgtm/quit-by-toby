@@ -16,6 +16,7 @@ import {
   rangeFor,
 } from "../src/services/report";
 import { emptyData } from "../src/services/demo";
+import { aiService } from "../src/services/ai";
 import type { AppData, Material, WorkEvent } from "../src/types";
 
 const material = (
@@ -146,7 +147,7 @@ describe("材料去重规则", () => {
     expect(list.some((r) => r.type === "hr")).toBe(true);
   });
 
-  it("库存补齐后待办自动标记为已完成，撤掉材料后回到待处理", () => {
+  it("库存补齐后待办自动标记为已完成，撤掉材料后回到待处理并清除关联引用", () => {
     const req: MaterialRequirement[] = [
       { type: "contract", title: "劳动合同", reason: "" },
     ];
@@ -156,8 +157,10 @@ describe("材料去重规则", () => {
       material({ id: "m1", type: "contract" }),
     ]);
     expect(done[0].status).toBe("completed");
+    expect(done[0].resolvedMaterialId).toBe("m1");
     const back = reconcileSuggestions(done, []);
     expect(back[0].status).toBe("pending");
+    expect(back[0].resolvedMaterialId).toBeUndefined();
   });
 });
 
@@ -314,5 +317,34 @@ describe("材料自动预填与每月工资提醒", () => {
       DATE,
     );
     expect(stale).toBe(true);
+  });
+
+  it("红队检测：aiService.summarize 在真实模型输出踩到禁用词时自动回退本地安全总结", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: "这家公司违法了，建议你辞职！" } }],
+        }),
+        { status: 200 },
+      )) as typeof fetch;
+    try {
+      const summary = await aiService.summarize(
+        { mood: "tired" },
+        "今天有点累",
+        { delayMs: 0, failNext: false },
+        {
+          apiKey: "sk-test",
+          model: "deepseek-flash",
+          baseUrl: "https://api.deepseek.com",
+          status: "ok",
+        },
+      );
+      expect(summary).toContain("模拟 AI");
+      expect(summary).not.toContain("公司违法");
+      expect(summary).not.toContain("建议你辞职");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });

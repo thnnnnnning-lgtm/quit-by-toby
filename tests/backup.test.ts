@@ -65,4 +65,52 @@ describe("导入备份", () => {
     expect(() => parseBackup(JSON.stringify({ hello: "world" }))).toThrow();
     expect(() => parseBackup(JSON.stringify([1, 2, 3]))).toThrow();
   });
+
+  it("红队检测：导入含脏元素、缺失子数组或越界打卡时间的备份时自动清洗，不引发渲染崩溃", () => {
+    const dirtyBackup = {
+      format: BACKUP_FORMAT,
+      version: 1,
+      data: {
+        onboarded: true,
+        checkInHour: 999,
+        entries: [
+          null,
+          "bad-entry",
+          { id: "e1", date: "2026-10-12", content: 123, tags: "not-array" },
+        ],
+        events: [
+          null,
+          {
+            id: "ev1",
+            title: "测试事件",
+            occurredAt: "2026-10-12",
+            people: "不是数组",
+            updates: [null, { id: "u1", content: "进展" }],
+            materialIds: null,
+            status: "confirmed",
+            attention: "invalid",
+          },
+        ],
+        materials: [
+          {
+            id: "m1",
+            name: "测试材料",
+            type: "contract",
+            eventIds: "bad",
+          },
+        ],
+      },
+    };
+    const parsed = parseBackup(JSON.stringify(dirtyBackup));
+    expect(parsed.checkInHour).toBe(23);
+    expect(parsed.entries).toHaveLength(1);
+    expect(parsed.entries[0].tags).toEqual([]);
+    expect(parsed.entries[0].content).toBe("");
+    expect(parsed.events).toHaveLength(1);
+    expect(parsed.events[0].people).toEqual([]);
+    expect(parsed.events[0].materialIds).toEqual([]);
+    expect(parsed.events[0].updates).toHaveLength(1);
+    expect(parsed.events[0].attention).toBe("watch");
+    expect(parsed.materials[0].eventIds).toEqual([]);
+  });
 });

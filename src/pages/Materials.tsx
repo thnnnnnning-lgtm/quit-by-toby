@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { Download, ShieldCheck } from "../components/doodles";
+import { Download, ShieldCheck, Trash2 } from "../components/doodles";
 import { useAppStore } from "../store/useAppStore";
 import {
   Badge,
   Button,
   Collapsible,
+  ConfirmDialog,
   EmptyState,
   ErrorState,
   LoadingState,
@@ -23,9 +24,7 @@ import {
   MATERIAL_STATUS,
   MATERIAL_TYPES,
   fullDate,
-  now,
   today,
-  uid,
 } from "../constants";
 import type { Material, MaterialType } from "../types";
 const emptyMaterial = (): Omit<Material, "id" | "createdAt" | "updatedAt"> => ({
@@ -47,8 +46,12 @@ export function MaterialUploadPage() {
   const consume = useAppStore((s) => s.consumeMockConfig);
   const editId = params.get("edit");
   const existing = editId ? materials.find((m) => m.id === editId) : undefined;
-  const initialType =
-    existing?.type ?? (params.get("type") as MaterialType) ?? "other";
+  const rawType = params.get("type");
+  const validParamType =
+    rawType && Object.prototype.hasOwnProperty.call(MATERIAL_TYPES, rawType)
+      ? (rawType as MaterialType)
+      : "other";
+  const initialType = existing?.type ?? validParamType;
   const [form, setForm] = useState<
     Omit<Material, "id" | "createdAt" | "updatedAt">
   >(() =>
@@ -88,6 +91,11 @@ export function MaterialUploadPage() {
   };
   const showCoverageInline =
     form.type === "salary" || form.type === "attendance";
+  const invalidCoverage = Boolean(
+    form.coverageStart &&
+      form.coverageEnd &&
+      form.coverageStart > form.coverageEnd,
+  );
   const [file, setFile] = useState<File | null>(null);
   const [stored, setStored] = useState<
     { blob: Blob; name: string; type: string } | undefined
@@ -138,6 +146,10 @@ export function MaterialUploadPage() {
   const submit = async () => {
     if (!form.name.trim()) {
       setError("请填写材料名称。");
+      return;
+    }
+    if (invalidCoverage) {
+      setError("开始日期不能晚于结束日期。");
       return;
     }
     setBusy(true);
@@ -328,11 +340,9 @@ export function MaterialUploadPage() {
               </div>
             </div>
           )}
-          {form.coverageStart &&
-            form.coverageEnd &&
-            form.coverageStart > form.coverageEnd && (
-              <p className="error">开始日期不能晚于结束日期。</p>
-            )}
+          {invalidCoverage && (
+            <p className="error">开始日期不能晚于结束日期。</p>
+          )}
           <Collapsible title="更多选项（可选）">
             <div className="stack">
               {!showCoverageInline && (
@@ -490,7 +500,7 @@ export function MaterialUploadPage() {
         <div className="button-row">
           <Button
             variant="primary"
-            disabled={busy || !form.name.trim()}
+            disabled={busy || !form.name.trim() || invalidCoverage}
             onClick={submit}
           >
             {busy ? "正在保存…" : "保存材料"}
@@ -508,10 +518,12 @@ export function MaterialDetailPage() {
   const toast = useToast();
   const material = useAppStore((s) => s.materials).find((m) => m.id === id);
   const events = useAppStore((s) => s.events);
+  const deleteMaterial = useAppStore((s) => s.deleteMaterial);
   const [stored, setStored] = useState<
     { blob: Blob; name: string; type: string } | undefined
   >();
   const [error, setError] = useState("");
+  const [deleteOpen, setDeleteOpen] = useState(false);
   useEffect(() => {
     if (material?.fileId)
       fileService
@@ -542,6 +554,7 @@ export function MaterialDetailPage() {
           subtitle={MATERIAL_TYPES[material.type]}
           back="/review?tab=materials"
         />
+        {error && <ErrorState message={error} onRetry={() => setError("")} />}
         <div className="card stack">
           <div className="flex flex-wrap items-center gap-2">
             <Badge
@@ -597,6 +610,10 @@ export function MaterialDetailPage() {
                 下载原始文件
               </Button>
             )}
+            <Button variant="ghost" onClick={() => setDeleteOpen(true)}>
+              <Trash2 size={16} />
+              删除材料
+            </Button>
           </div>
         </div>
         {stored ? (
@@ -667,6 +684,20 @@ export function MaterialDetailPage() {
           <Button onClick={() => navigate(-1)}>返回</Button>
         </div>
       </div>
+      <ConfirmDialog
+        open={deleteOpen}
+        title="删除这份材料？"
+        danger
+        confirmText="确认删除"
+        description="删除后，这份材料及已上传的本地原始文件将被移除，已关联的事件会自动解除关联，对应的留痕建议会恢复为待处理。"
+        onCancel={() => setDeleteOpen(false)}
+        onConfirm={async () => {
+          await deleteMaterial(material.id);
+          setDeleteOpen(false);
+          toast("材料已删除");
+          navigate("/review?tab=materials", { replace: true });
+        }}
+      />
     </RequireProfile>
   );
 }

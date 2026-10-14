@@ -495,4 +495,111 @@ test.describe("加固项回归", () => {
     );
     expect(restored).toContain("已确认事件");
   });
+
+  test("红队回归：追加进展卡片写入的是用户补充原话，而非 AI 回复话术", async ({
+    page,
+  }) => {
+    await page.goto("/today");
+    await closeCheckInIfAny(page);
+
+    // 第一步：产生并确认「项目群成员变化」事件
+    await page.locator("#message").fill("老板把我移出项目群了");
+    await page.getByRole("button", { name: "发送", exact: true }).click();
+    await page.getByRole("button", { name: "记下来" }).first().click();
+    await expect(
+      page.getByTestId("conversation").getByText("已记入回顾"),
+    ).toBeVisible();
+
+    // 第二步：继续补充同一件事，触发「追加进展」卡片
+    const followUp = "下午主管又把我的项目群文档权限也收回了";
+    await page.locator("#message").fill(followUp);
+    await page.getByRole("button", { name: "发送", exact: true }).click();
+    await expect(
+      page.getByText(/追加进展到「项目群成员变化」/),
+    ).toBeVisible({ timeout: 15000 });
+    await page.getByRole("button", { name: "追加进展" }).click();
+
+    // 第三步：进入事件详情核对，进展内容必须是用户的补充原话，绝不能是 AI 回复套话
+    await page.goto("/review?tab=events");
+    await page.getByRole("link", { name: /项目群成员变化/ }).click();
+    await expect(page.getByText(followUp)).toBeVisible();
+    await expect(page.getByText(/看起来是同一件/)).toHaveCount(0);
+  });
+
+  test("红队回归：首次引导第 2 步点「上传」直接完成建档进入上传页，不丢失已填信息", async ({
+    page,
+  }) => {
+    await page.goto("/profile");
+    await page.getByRole("button", { name: "清空本地数据" }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "我确认清空" })
+      .click();
+    await expect(page).toHaveURL(/\/onboarding/);
+
+    await page.getByRole("button", { name: "开始记录" }).click();
+    await page.getByRole("button", { name: /补充工作信息/ }).click();
+    await page.getByLabel("公司").fill("红队测试科技");
+    await page.getByRole("button", { name: "下一步" }).click();
+
+    // 在第 2 步基础材料直接点第一项（劳动合同）的「上传」
+    await page.getByRole("button", { name: "上传" }).first().click();
+    await expect(page).toHaveURL(/\/materials\/upload\?type=contract/);
+    await expect(page.getByLabel("材料名称")).toHaveValue("当前有效劳动合同");
+
+    // 档案已自动保存，未被踢回引导第 0 步
+    await page.goto("/profile");
+    await expect(page.getByText("红队测试科技")).toBeVisible();
+  });
+
+  test("红队回归：材料上传拦截倒挂起止日期，且材料详情支持删除材料", async ({
+    page,
+  }) => {
+    await page.goto("/materials/upload?type=salary");
+    await page.getByLabel(/覆盖开始日期/).fill("2026-10-31");
+    await page.getByLabel(/覆盖结束日期/).fill("2026-10-01");
+    await expect(page.getByText("开始日期不能晚于结束日期。")).toBeVisible();
+    await expect(page.getByRole("button", { name: "保存材料" })).toBeDisabled();
+
+    // 进入材料库删除一份材料
+    await page.goto("/review?tab=materials");
+    await expect(page.getByText("当前有效劳动合同")).toBeVisible();
+    await page
+      .getByTestId("material-row")
+      .filter({ hasText: "当前有效劳动合同" })
+      .getByRole("link", { name: "详情" })
+      .click();
+    await page.getByRole("button", { name: "删除材料" }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "确认删除" })
+      .click();
+    await expect(page).toHaveURL(/\/review\?tab=materials/);
+    await expect(page.getByText("当前有效劳动合同")).toHaveCount(0);
+  });
+
+  test("红队回归：支持直接编辑当天日记原文，并在回顾页「日记」Tab 跨月检索", async ({
+    page,
+  }) => {
+    await page.goto("/today");
+    await closeCheckInIfAny(page);
+
+    const summaryToggle = page.getByRole("button", { name: /今日摘要/ }).first();
+    if ((await summaryToggle.getAttribute("aria-expanded")) === "false") {
+      await summaryToggle.click();
+    }
+    await page.getByRole("button", { name: "编辑原文" }).first().click();
+    const dialog = page.getByRole("dialog");
+    await dialog
+      .getByLabel("日记原文内容")
+      .fill("红队专项记录：今天核对了季度绩效目标");
+    await dialog.getByRole("button", { name: "保存原文" }).click();
+
+    await page.goto("/review?tab=entries");
+    await page.getByLabel("关键词搜索").fill("红队专项记录");
+    await expect(
+      page.getByText("红队专项记录：今天核对了季度绩效目标"),
+    ).toBeVisible();
+  });
 });
+

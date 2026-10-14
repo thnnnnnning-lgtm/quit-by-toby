@@ -62,6 +62,8 @@ export interface AppStore extends AppData {
   setStatus: (input: DailyStatusInput) => string;
   /** 保存输入框里还没发送的文字，刷新后可以恢复 */
   setDraftText: (entryId: string, draftText: string) => void;
+  /** 直接编辑某天的日记原文（方便用户修正错别字或补充记录） */
+  updateEntryContent: (entryId: string, content: string) => void;
   /** 写入 AI 今日总结（与用户原文分开保存） */
   setSummary: (entryId: string, summary: string) => void;
 
@@ -79,6 +81,7 @@ export interface AppStore extends AppData {
   createManualEvent: (input: EventInput) => string;
 
   saveMaterial: (input: MaterialInput, suggestionId?: string) => string;
+  deleteMaterial: (id: string) => Promise<void>;
   suggest: (requirements: MaterialRequirement[], entryId?: string) => string[];
   setSuggestionStatus: (
     id: string,
@@ -167,10 +170,22 @@ export const useAppStore = create<AppStore>()(
         return id;
       },
 
-      setDraftText: (entryId, draftText) =>
+      setDraftText: (entryId, draftText) => {
+        const current = get().entries.find((e) => e.id === entryId);
+        if (!current || (current.draftText ?? "") === draftText) return;
         set((s) => ({
           entries: s.entries.map((e) =>
             e.id === entryId ? { ...e, draftText, updatedAt: now() } : e,
+          ),
+        }));
+      },
+
+      updateEntryContent: (entryId, content) =>
+        set((s) => ({
+          entries: s.entries.map((e) =>
+            e.id === entryId
+              ? { ...e, content: content.trim(), updatedAt: now() }
+              : e,
           ),
         })),
 
@@ -454,6 +469,31 @@ export const useAppStore = create<AppStore>()(
           return { materials, events, suggestions };
         });
         return id;
+      },
+
+      deleteMaterial: async (id) => {
+        const target = get().materials.find((m) => m.id === id);
+        if (!target) return;
+        if (target.fileId) {
+          await fileService.remove(target.fileId).catch(() => {});
+        }
+        set((s) => {
+          const materials = s.materials.filter((m) => m.id !== id);
+          const events = s.events.map((e) => ({
+            ...e,
+            materialIds: e.materialIds.filter((x) => x !== id),
+          }));
+          const cleanedSuggestions = s.suggestions.map((sug) =>
+            sug.resolvedMaterialId === id
+              ? { ...sug, resolvedMaterialId: undefined }
+              : sug,
+          );
+          return {
+            materials,
+            events,
+            suggestions: reconcileSuggestions(cleanedSuggestions, materials),
+          };
+        });
       },
 
       suggest: (requirements, entryId) => {

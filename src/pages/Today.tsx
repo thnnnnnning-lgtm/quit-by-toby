@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   AlertCircle,
@@ -9,6 +9,7 @@ import {
   Companion,
   Loader2,
   MoodFace,
+  Pencil,
   RefreshCw,
   Send,
   ShieldAlert,
@@ -107,6 +108,7 @@ function TodayWorkspace({ date }: { date: string }) {
   const ensureEntry = useAppStore((s) => s.ensureEntry);
   const setStatusAction = useAppStore((s) => s.setStatus);
   const setDraftText = useAppStore((s) => s.setDraftText);
+  const updateEntryContent = useAppStore((s) => s.updateEntryContent);
   const setSummary = useAppStore((s) => s.setSummary);
   const appendMessage = useAppStore((s) => s.appendMessage);
   const setMessageStatus = useAppStore((s) => s.setMessageStatus);
@@ -197,9 +199,61 @@ function TodayWorkspace({ date }: { date: string }) {
   const [error, setError] = useState("");
   const [editing, setEditing] = useState<WorkEvent | null>(null);
   const [eventsOpen, setEventsOpen] = useState(false);
+  const [contentModalOpen, setContentModalOpen] = useState(false);
+  const [contentDraft, setContentDraft] = useState("");
   const composing = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const mounted = useRef(false);
+
+  /**
+   * 输入框草稿防抖 + 页面卸载/失焦强制落盘：
+   * 连续打字时用 150ms 防抖避免每次按键都触发 localStorage 全量序列化；
+   * 同时监听 beforeunload / pagehide 与组件卸载，保证哪怕输完立刻刷新也不丢一字。
+   */
+  const draftTimerRef = useRef<number | null>(null);
+  const pendingDraftRef = useRef<string | null>(null);
+
+  const flushDraft = useCallback(() => {
+    if (draftTimerRef.current !== null) {
+      window.clearTimeout(draftTimerRef.current);
+      draftTimerRef.current = null;
+    }
+    if (pendingDraftRef.current === null) return;
+    const val = pendingDraftRef.current;
+    pendingDraftRef.current = null;
+    const currentEntry = useAppStore
+      .getState()
+      .entries.find((e) => e.date === date);
+    if (currentEntry) {
+      setDraftText(currentEntry.id, val);
+    } else if (val) {
+      setDraftText(ensureEntry(date), val);
+    }
+  }, [date, ensureEntry, setDraftText]);
+
+  const scheduleDraftSave = useCallback(
+    (nextValue: string) => {
+      pendingDraftRef.current = nextValue;
+      if (draftTimerRef.current !== null) {
+        window.clearTimeout(draftTimerRef.current);
+      }
+      draftTimerRef.current = window.setTimeout(() => {
+        flushDraft();
+      }, 150);
+    },
+    [flushDraft],
+  );
+
+  useEffect(() => {
+    const onUnload = () => flushDraft();
+    window.addEventListener("beforeunload", onUnload);
+    window.addEventListener("pagehide", onUnload);
+    return () => {
+      window.removeEventListener("beforeunload", onUnload);
+      window.removeEventListener("pagehide", onUnload);
+      flushDraft();
+    };
+  }, [flushDraft]);
 
   // 打开历史日期时直接定位到最新消息；之后只在自己发送后跟随
   useEffect(() => {
@@ -236,6 +290,11 @@ function TodayWorkspace({ date }: { date: string }) {
   const send = async (raw: string) => {
     const value = raw.trim();
     if (!value || sending) return;
+    if (draftTimerRef.current !== null) {
+      window.clearTimeout(draftTimerRef.current);
+      draftTimerRef.current = null;
+    }
+    pendingDraftRef.current = null;
     setSending(true);
     setError("");
     setText("");
@@ -313,6 +372,9 @@ function TodayWorkspace({ date }: { date: string }) {
           candidateEventIds: reply.noteworthy ? candidateEventIds : [],
           emergency: reply.emergency,
           updateSuggestionEventId: reply.updateSuggestionEventId,
+          updateSuggestionContent: reply.updateSuggestionEventId
+            ? value
+            : undefined,
           // 必须带上：下一条用户消息要用来补全这个候选事件
           clarify: reply.clarify,
           // AI 调用失败或踩线时，明确标注这条是本地模板回复
@@ -356,7 +418,13 @@ function TodayWorkspace({ date }: { date: string }) {
   const shiftDate = (days: number) => {
     const next = addDays(date, days);
     if (isFuture(next)) return;
+    flushDraft();
     navigate(`/today/${next}`);
+  };
+
+  const openEditContent = () => {
+    setContentDraft(entry?.content ?? "");
+    setContentModalOpen(true);
   };
 
   return (
@@ -429,7 +497,10 @@ function TodayWorkspace({ date }: { date: string }) {
               value={date}
               max={today()}
               onChange={(e) => {
-                if (e.target.value) navigate(`/today/${e.target.value}`);
+                if (e.target.value) {
+                  flushDraft();
+                  navigate(`/today/${e.target.value}`);
+                }
               }}
             />
             {/* 紧急入口放在顶部：时间紧的事情不用滚到页面底部才能找到 */}
@@ -462,6 +533,7 @@ function TodayWorkspace({ date }: { date: string }) {
               onRetrySummary={() =>
                 entry && generateSummary(entry.id, entry.content, entry)
               }
+              onEditContent={openEditContent}
             />
           </Collapsible>
           <Collapsible
@@ -483,7 +555,13 @@ function TodayWorkspace({ date }: { date: string }) {
               <SectionTitle
                 title="今天的状态"
                 subtitle="选一个心情就能保存，也可以直接写一句话。"
-                action={<MockBadge label="演示模式" />}
+                action={
+                  ai.apiKey ? (
+                    <AiStatusLight status={ai.status} />
+                  ) : (
+                    <MockBadge label="演示模式" />
+                  )
+                }
               />
               <MoodPicker value={mood} onChange={setMood} />
 
@@ -630,12 +708,21 @@ function TodayWorkspace({ date }: { date: string }) {
                           const event = events.find(
                             (e) => e.id === message.updateSuggestionEventId,
                           );
-                          return event ? (
+                          if (!event) return null;
+                          // 取触发本条建议的用户补充原文，避免把 AI 自己的提示话术误存进事件进展
+                          const userAddition =
+                            message.updateSuggestionContent ||
+                            dayMessages
+                              .slice(0, index)
+                              .reverse()
+                              .find((m) => m.role === "user")?.content ||
+                            message.content;
+                          return (
                             <UpdateSuggestionCard
                               event={event}
-                              content={message.content}
+                              content={userAddition}
                             />
-                          ) : null;
+                          );
                         })()}
                     </div>
                   );
@@ -672,12 +759,12 @@ function TodayWorkspace({ date }: { date: string }) {
                     className="min-h-16 w-full resize-none bg-transparent px-2 py-1.5 text-sm text-[var(--color-ink)] outline-none placeholder:text-[var(--color-faint)]"
                     value={text}
                     onChange={(e) => {
-                      setText(e.target.value);
-                      // 还没发送的文字也留着，刷新后能接着写
-                      if (entry) setDraftText(entry.id, e.target.value);
-                      else if (e.target.value)
-                        setDraftText(ensureEntry(date), e.target.value);
+                      const val = e.target.value;
+                      setText(val);
+                      // 防抖保存未发送的草稿，并在卸载/刷新时自动同步落盘
+                      scheduleDraftSave(val);
                     }}
+                    onBlur={flushDraft}
                     onKeyDown={onKeyDown}
                     onCompositionStart={() => {
                       composing.current = true;
@@ -769,7 +856,6 @@ function TodayWorkspace({ date }: { date: string }) {
                 </p>
               )}
             </section>
-
           </div>
 
           {/* 桌面端：右侧可折叠摘要栏（今日摘要 + 今日整理） */}
@@ -785,6 +871,7 @@ function TodayWorkspace({ date }: { date: string }) {
                   onRetrySummary={() =>
                     entry && generateSummary(entry.id, entry.content, entry)
                   }
+                  onEditContent={openEditContent}
                 />
               </Collapsible>
               <Collapsible
@@ -803,6 +890,40 @@ function TodayWorkspace({ date }: { date: string }) {
 
       {editing && (
         <EventEditModal event={editing} onClose={() => setEditing(null)} />
+      )}
+      {contentModalOpen && (
+        <Modal
+          title={`${formatDate(date)} 日记原文`}
+          onClose={() => setContentModalOpen(false)}
+        >
+          <div className="stack">
+            <p className="small muted">
+              当天在对话里发送的每句话都会归档到这里。你可以直接修改错别字或补充记录，不会影响已确认的事件。
+            </p>
+            <textarea
+              aria-label="日记原文内容"
+              className="input min-h-36"
+              value={contentDraft}
+              onChange={(e) => setContentDraft(e.target.value)}
+              placeholder="写下今天想保留的原文记录…"
+            />
+            <div className="button-row justify-end">
+              <Button onClick={() => setContentModalOpen(false)}>取消</Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  const id = ensureEntry(date);
+                  updateEntryContent(id, contentDraft);
+                  setSaveState("saved");
+                  setContentModalOpen(false);
+                  toast("日记原文已更新");
+                }}
+              >
+                保存原文
+              </Button>
+            </div>
+          </div>
+        </Modal>
       )}
       {eventsOpen && (
         <Modal
@@ -887,6 +1008,7 @@ function DaySummary({
   suggestions,
   summaryState,
   onRetrySummary,
+  onEditContent,
 }: {
   entry?: DailyEntry;
   drafts: WorkEvent[];
@@ -894,6 +1016,7 @@ function DaySummary({
   suggestions: MaterialSuggestion[];
   summaryState: "idle" | "loading" | "error";
   onRetrySummary: () => void;
+  onEditContent: () => void;
 }) {
   const pending = pendingSuggestions(suggestions);
   return (
@@ -907,6 +1030,22 @@ function DaySummary({
           </p>
         ) : (
           <p className="muted">还没选心情。</p>
+        )}
+      </div>
+      <div className="divider pt-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="faint">日记原文</p>
+          <Button size="sm" variant="ghost" onClick={onEditContent}>
+            <Pencil size={13} />
+            编辑原文
+          </Button>
+        </div>
+        {entry?.content ? (
+          <p className="line-clamp-3 whitespace-pre-line text-sm leading-relaxed">
+            {entry.content}
+          </p>
+        ) : (
+          <p className="muted">还没有文字记录。</p>
         )}
       </div>
       <div className="divider pt-3">

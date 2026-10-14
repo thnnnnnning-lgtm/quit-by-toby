@@ -150,6 +150,8 @@ export interface ChatMessage {
   emergency?: boolean;
   /** 已确认事件被新消息补充时，展示「追加进展」建议 */
   updateSuggestionEventId?: string;
+  /** 触发「追加进展」建议的用户补充原文（避免把 AI 回复话术误写入事件进展） */
+  updateSuggestionContent?: string;
   /** AI 需要先澄清 1–2 个问题：下一条用户消息用于补全这个候选事件 */
   clarify?: EventInput;
   /** 真实模型调用失败或输出踩到产品边界时，这条回复来自本地模板 */

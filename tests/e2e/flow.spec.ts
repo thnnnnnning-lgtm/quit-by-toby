@@ -86,7 +86,9 @@ test("完整流程：引导 → 今天（心情 + 对话）→ 记入回顾 → 
   // 刷新后状态、对话与已确认结果都还在
   await page.reload();
   await expect(page.locator("#message")).toBeVisible({ timeout: 15000 });
-  await expect(page.getByText("老板把我移出项目群了")).toBeVisible();
+  await expect(
+    page.getByTestId("conversation").getByText("老板把我移出项目群了"),
+  ).toBeVisible();
   await expect(
     page.getByTestId("conversation").getByText("项目群成员变化"),
   ).toBeVisible();
@@ -149,7 +151,9 @@ test("可以从历史日期进入那一天的记录与对话", async ({ page }) 
   // 演示故事里两天前的记录带着当时的对话
   await page.goto(`/today/${dayKey(-2)}`);
   await expect(
-    page.getByText("今天被移出项目群了，想找主管了解一下情况。"),
+    page
+      .getByTestId("conversation")
+      .getByText("今天被移出项目群了，想找主管了解一下情况。"),
   ).toBeVisible();
 
   // 已确认事件可以从顶部入口查看
@@ -240,7 +244,9 @@ test("回顾默认只展示日历、近期记录和重要事件，不堆满统�
   // 点日历里的某一天，可以直接回到那天的记录
   await page.goto(`/today/${dayKey(-2)}`);
   await expect(
-    page.getByText("今天被移出项目群了，想找主管了解一下情况。"),
+    page
+      .getByTestId("conversation")
+      .getByText("今天被移出项目群了，想找主管了解一下情况。"),
   ).toBeVisible();
 });
 

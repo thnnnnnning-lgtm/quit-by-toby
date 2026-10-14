@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
   Companion,
   FileText,
+  NotebookPen,
   Paperclip,
   Pencil,
   Plus,
@@ -13,6 +14,7 @@ import {
 } from "../components/doodles";
 import { useAppStore } from "../store/useAppStore";
 import {
+  Badge,
   Button,
   EmptyState,
   PageHeader,
@@ -26,6 +28,8 @@ import {
   MATERIAL_STATUS,
   MATERIAL_TYPES,
   MOODS,
+  MOOD_ORDER,
+  dateWithWeekday,
   hasRecord,
   monthRange,
   today,
@@ -34,11 +38,12 @@ import { pendingSuggestions } from "../services/materials";
 import type { Attention, MaterialStatus, MaterialType, Mood } from "../types";
 
 /**
- * 回顾：默认只展示日历、近期记录和已确认的重要事件。
- * 事件列表、材料库、待补充材料、报告都是次级入口，默认不堆满统计和待办。
+ * 回顾：默认只展示日历和已确认的重要事件。
+ * 日记检索、事件列表、材料库、待补充材料、报告都是次级入口，默认不堆满统计和待办。
  */
 const TABS = [
   { key: "review", label: "回顾" },
+  { key: "entries", label: "日记" },
   { key: "events", label: "事件" },
   { key: "materials", label: "材料" },
   { key: "pending", label: "待补充材料" },
@@ -57,17 +62,38 @@ export default function ReviewPage() {
   const setTab = (key: string) => setParams({ tab: key });
 
   const [month, setMonth] = useState(today().slice(0, 7));
+  const recordedEntries = useMemo(
+    () =>
+      entries
+        .filter((e) => hasRecord(e))
+        .sort((a, b) => b.date.localeCompare(a.date)),
+    [entries],
+  );
   const confirmed = events.filter((e) => e.status === "confirmed");
   const saved = materials.filter(
     (m) => m.status === "uploaded" || m.status === "saved_externally",
   );
   const pending = pendingSuggestions(suggestions);
+  const [moodFilter, setMoodFilter] = useState<Mood | "all">("all");
+  const [entryQuery, setEntryQuery] = useState("");
   const [attention, setAttention] = useState<Attention | "all">("all");
   const [eventQuery, setEventQuery] = useState("");
   const [type, setType] = useState<MaterialType | "all">("all");
   const [status, setStatusFilter] = useState<MaterialStatus | "all">("all");
   const [materialQuery, setMaterialQuery] = useState("");
 
+  const filteredEntries = useMemo(
+    () =>
+      recordedEntries.filter(
+        (e) =>
+          (moodFilter === "all" || e.mood === moodFilter) &&
+          (!entryQuery.trim() ||
+            `${e.date} ${e.content ?? ""} ${e.aiSummary ?? ""}`
+              .toLowerCase()
+              .includes(entryQuery.trim().toLowerCase())),
+      ),
+    [recordedEntries, moodFilter, entryQuery],
+  );
   const filteredEvents = useMemo(
     () =>
       confirmed
@@ -182,6 +208,10 @@ export default function ReviewPage() {
             <section className="panel stack">
               <SectionTitle title="更多" subtitle="需要的时候再进来，不必每天都看。" />
               <div className="button-row">
+                <Button size="sm" onClick={() => setTab("entries")}>
+                  <NotebookPen size={15} />
+                  日记检索（{recordedEntries.length}）
+                </Button>
                 <Button size="sm" onClick={() => setTab("events")}>
                   <CalendarDays size={15} />
                   事件列表（{confirmed.length}）
@@ -199,6 +229,91 @@ export default function ReviewPage() {
                 </Button>
               </div>
             </section>
+          </div>
+        )}
+
+        {tab === "entries" && (
+          <div className="stack">
+            <div className="card stack">
+              <div className="form-grid">
+                <div className="field">
+                  <label className="label" htmlFor="entry-mood">
+                    当天心情
+                  </label>
+                  <select
+                    id="entry-mood"
+                    className="input"
+                    value={moodFilter}
+                    onChange={(e) =>
+                      setMoodFilter(e.target.value as Mood | "all")
+                    }
+                  >
+                    <option value="all">全部心情</option>
+                    {MOOD_ORDER.map((m) => (
+                      <option key={m} value={m}>
+                        {MOODS[m].label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label className="label" htmlFor="eq">
+                    关键词搜索
+                  </label>
+                  <input
+                    id="eq"
+                    className="input"
+                    value={entryQuery}
+                    onChange={(e) => setEntryQuery(e.target.value)}
+                    placeholder="搜索跨月日记原文或总结"
+                  />
+                </div>
+              </div>
+              <p className="small muted">
+                支持跨月份检索你写下的日常记录与心情，点击任意一天可回到当天页面。
+              </p>
+            </div>
+            {filteredEntries.length ? (
+              filteredEntries.map((entry) => (
+                <Link
+                  key={entry.id}
+                  to={`/today/${entry.date}`}
+                  className="card kbd-focus stack hover:bg-[var(--color-fill)]"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      {entry.mood ? (
+                        <MoodFace mood={entry.mood} size={24} />
+                      ) : (
+                        <DiaryMark size={20} className="text-[var(--color-muted)]" />
+                      )}
+                      <h3>{dateWithWeekday(entry.date)}</h3>
+                      {entry.mood && (
+                        <Badge tone="neutral">{MOODS[entry.mood].label}</Badge>
+                      )}
+                    </div>
+                    <span className="faint">{entry.date}</span>
+                  </div>
+                  {entry.content ? (
+                    <p className="line-clamp-2 whitespace-pre-line text-sm">
+                      {entry.content}
+                    </p>
+                  ) : (
+                    <p className="small muted">（当天只记录了心情，未写文字）</p>
+                  )}
+                </Link>
+              ))
+            ) : (
+              <EmptyState
+                title="没有匹配的日记记录"
+                description="换一个关键词或心情筛选试试，或者去记录今天。"
+                action={
+                  <Button variant="primary" to="/today">
+                    记录今天
+                  </Button>
+                }
+              />
+            )}
           </div>
         )}
 

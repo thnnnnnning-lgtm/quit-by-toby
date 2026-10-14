@@ -78,8 +78,8 @@ export default function OnboardingPage() {
     }
   };
 
-  /** 无论从哪一步结束，都只保存已经填写的内容，不做额外要求 */
-  const finishSetup = () => {
+  /** 保存当前已填的档案与标记材料，并将 onboarded 设为 true */
+  const commitSetup = () => {
     const profile: WorkProfile = {
       id: uid(),
       employmentStatus: status,
@@ -103,7 +103,18 @@ export default function OnboardingPage() {
       });
     }
     finish(profile);
+  };
+
+  /** 无论从哪一步结束，都只保存已经填写的内容，不做额外要求 */
+  const finishSetup = () => {
+    commitSetup();
     navigate("/today", { replace: true });
+  };
+
+  /** 在引导第 2 步点「上传」时，先完成建档再进入上传页，避免被 RequireProfile 重定向回第 0 步丢失状态 */
+  const finishAndUpload = (materialType: MaterialType) => {
+    commitSetup();
+    navigate(`/materials/upload?type=${materialType}`);
   };
 
   return (
@@ -259,7 +270,7 @@ export default function OnboardingPage() {
               ) : (
                 <div className="button-row">
                   <Button
-                    to={`/materials/upload?type=${item.type === "employee" ? "other" : item.type}`}
+                    onClick={() => finishAndUpload(item.materialType)}
                   >
                     上传
                   </Button>

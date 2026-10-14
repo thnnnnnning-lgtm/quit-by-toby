@@ -360,34 +360,49 @@ export interface StructuredTurn {
 
 const ATTENTION_SET: Attention[] = ["normal", "watch", "priority"];
 
+/**
+ * 严格校验 YYYY-MM-DD 是否为真实存在的日历日期（拦截 2026-02-31、2026-99-99 等伪造日期）。
+ */
+export function isValidDateString(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const d = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return false;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}` === value;
+}
+
 /** 校验并清洗模型 JSON：任何字段不合规都会降级或丢弃，绝不直接信任模型输出 */
 export function normalizeStructuredTurn(
   raw: unknown,
   date: string,
 ): StructuredTurn | null {
-  if (!raw || typeof raw !== "object") return null;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const o = raw as Record<string, unknown>;
-  const reply = typeof o.reply === "string" ? o.reply.trim() : "";
+  const reply =
+    typeof o.reply === "string" ? o.reply.trim().slice(0, 600) : "";
   let event: StructuredTurn["event"] = null;
-  if (o.event && typeof o.event === "object") {
+  if (o.event && typeof o.event === "object" && !Array.isArray(o.event)) {
     const ev = o.event as Record<string, unknown>;
     const title = typeof ev.title === "string" ? ev.title.trim().slice(0, 40) : "";
     if (title) {
       const rawDate =
         typeof ev.occurredAt === "string" ? ev.occurredAt.slice(0, 10) : "";
       const occurredAt =
-        /^\d{4}-\d{2}-\d{2}$/.test(rawDate) && rawDate <= date
-          ? rawDate
-          : null;
+        isValidDateString(rawDate) && rawDate <= date ? rawDate : null;
       event = {
         title,
         occurredAt,
         people: Array.isArray(ev.people)
-          ? ev.people
-              .filter((x): x is string => typeof x === "string")
-              .map((x) => x.trim())
-              .filter(Boolean)
-              .slice(0, 6)
+          ? Array.from(
+              new Set(
+                ev.people
+                  .filter((x): x is string => typeof x === "string")
+                  .map((x) => x.trim().slice(0, 24))
+                  .filter(Boolean),
+              ),
+            ).slice(0, 6)
           : [],
         attention: ATTENTION_SET.includes(ev.attention as Attention)
           ? (ev.attention as Attention)
@@ -403,7 +418,7 @@ export function normalizeStructuredTurn(
   const needTime = o.needTime === true;
   const addToExistingTitle =
     typeof o.addToExistingTitle === "string" && o.addToExistingTitle.trim()
-      ? o.addToExistingTitle.trim()
+      ? o.addToExistingTitle.trim().slice(0, 40)
       : null;
   if (!reply && !event && !urgent) return null;
   return { reply, urgent, needTime, addToExistingTitle, event };
@@ -432,7 +447,8 @@ ${ctx.userText.slice(-1500)}`,
  * 模型回复踩到产品明确不说的表述时，整条输出弃用、回退本地模板（保守优先）。
  * 这是演示级的安全网，极少数误判的代价只是一条稳妥的本地回复。
  */
-const BANNED_REPLY = /(公司违法|一定能赢|必须辞职|一定要辞职|建议你辞职|仲裁必胜)/;
+const BANNED_REPLY =
+  /(公司违法|违反劳动法|违法解除|违法辞退|一定能赢|仲裁必胜|稳赢|包赢|胜诉率|必须辞职|一定要辞职|建议你辞职|赶紧辞职|立刻辞职)/;
 export const violatesReplyBoundaries = (text: string) => BANNED_REPLY.test(text);
 
 /**
@@ -533,18 +549,21 @@ export async function fillClarifyAnswer(
     ],
     120,
   );
-  if (!raw || typeof raw !== "object") return null;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const o = raw as Record<string, unknown>;
   const rawDate =
     typeof o.occurredAt === "string" ? o.occurredAt.slice(0, 10) : "";
   const occurredAt =
-    /^\d{4}-\d{2}-\d{2}$/.test(rawDate) && rawDate <= date ? rawDate : null;
+    isValidDateString(rawDate) && rawDate <= date ? rawDate : null;
   const people = Array.isArray(o.people)
-    ? o.people
-        .filter((x): x is string => typeof x === "string")
-        .map((x) => x.trim())
-        .filter(Boolean)
-        .slice(0, 6)
+    ? Array.from(
+        new Set(
+          o.people
+            .filter((x): x is string => typeof x === "string")
+            .map((x) => x.trim().slice(0, 24))
+            .filter(Boolean),
+        ),
+      ).slice(0, 6)
     : [];
   return { occurredAt, people };
 }
@@ -603,7 +622,7 @@ export const aiService = {
     await simulate(config);
     return local;
   },
-  /** 生成今日总结：配置了 Key 时同样优先真实模型 */
+  /** 生成今日总结：配置了 Key 时同样优先真实模型，并经过同样的输出护栏校验 */
   async summarize(
     status: Partial<DailyStatusInput>,
     userText: string,
@@ -613,8 +632,15 @@ export const aiService = {
   ) {
     if (ai?.apiKey && ai.status !== "testing") {
       try {
-        const content = await deepseekChat(ai, summaryMessages(status, userText), 300);
+        const content = await deepseekChat(
+          ai,
+          summaryMessages(status, userText),
+          300,
+        );
         onStatus?.({ status: "ok", lastError: undefined });
+        if (violatesReplyBoundaries(content)) {
+          return buildSummary(status, userText);
+        }
         return content;
       } catch (e) {
         onStatus?.({ status: "error", lastError: (e as Error).message });

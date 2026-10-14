@@ -3,6 +3,7 @@ import {
   buildReply,
   buildSummary,
   classifyIntent,
+  isValidDateString,
   normalizeStructuredTurn,
   parsePeople,
   resolveDate,
@@ -177,11 +178,16 @@ describe("AI 是记录整理助手，不是聊天机器人", () => {
 });
 
 describe("DeepSeek 输出护栏", () => {
-  it("踩到产品边界的表述会被识别", () => {
+  it("踩到产品边界的表述会被识别（含变体表达）", () => {
     expect(violatesReplyBoundaries("这家公司违法了")).toBe(true);
+    expect(violatesReplyBoundaries("这明显违反劳动法")).toBe(true);
+    expect(violatesReplyBoundaries("属于违法解除")).toBe(true);
     expect(violatesReplyBoundaries("你一定能赢")).toBe(true);
+    expect(violatesReplyBoundaries("去申请仲裁稳赢")).toBe(true);
+    expect(violatesReplyBoundaries("这种胜诉率是百分之百")).toBe(true);
     expect(violatesReplyBoundaries("这种情况你必须辞职")).toBe(true);
     expect(violatesReplyBoundaries("建议你辞职")).toBe(true);
+    expect(violatesReplyBoundaries("赶紧辞职吧")).toBe(true);
   });
 
   it("正常平实的回复不会误判", () => {
@@ -222,14 +228,14 @@ describe("DeepSeek 结构化指令的校验", () => {
     expect(turn?.event?.attention).toBe("watch");
   });
 
-  it("非法字段会被清洗：未来日期置空、关注程度回落、人物去杂", () => {
+  it("非法字段会被清洗：未来日期置空、伪造日历日期置空、关注程度回落、人物去重去杂", () => {
     const turn = normalizeStructuredTurn(
       {
         reply: "好的",
         event: {
           title: "测试标题",
           occurredAt: "2099-01-01",
-          people: ["张三", 123, " 李四 "],
+          people: ["张三", 123, " 李四 ", "张三"],
           attention: "hack",
           description: "很长的描述".repeat(300),
         },
@@ -240,11 +246,32 @@ describe("DeepSeek 结构化指令的校验", () => {
     expect(turn?.event?.attention).toBe("watch");
     expect(turn?.event?.people).toEqual(["张三", "李四"]);
     expect((turn?.event?.description ?? "").length).toBeLessThanOrEqual(500);
+
+    // 红队检测：形如 YYYY-MM-DD 但实际不存在的日期（如 2 月 31 日）必须被拦截
+    expect(isValidDateString("2026-02-31")).toBe(false);
+    expect(isValidDateString("2026-13-01")).toBe(false);
+    expect(isValidDateString("2026-00-10")).toBe(false);
+    expect(isValidDateString("2026-10-10")).toBe(true);
+    const fakeDateTurn = normalizeStructuredTurn(
+      {
+        reply: "好的",
+        event: {
+          title: "伪造日期测试",
+          occurredAt: "2026-02-31",
+          people: [],
+          attention: "watch",
+          description: "测试",
+        },
+      },
+      DATE,
+    );
+    expect(fakeDateTurn?.event?.occurredAt).toBeNull();
   });
 
-  it("缺少必要字段时返回 null，交由本地规则兜底", () => {
+  it("缺少必要字段或传入数组时返回 null，交由本地规则兜底", () => {
     expect(normalizeStructuredTurn(null, DATE)).toBeNull();
     expect(normalizeStructuredTurn("不是我", DATE)).toBeNull();
+    expect(normalizeStructuredTurn([1, 2, 3], DATE)).toBeNull();
     expect(normalizeStructuredTurn({}, DATE)).toBeNull();
     expect(normalizeStructuredTurn({ event: { title: "" } }, DATE)).toBeNull();
   });
