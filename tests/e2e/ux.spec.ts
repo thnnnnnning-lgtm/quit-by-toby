@@ -603,3 +603,46 @@ test.describe("加固项回归", () => {
   });
 });
 
+
+test.describe("日记原文只记有价值的内容", () => {
+  test("纯寒暄留在对话里但不进原文；具体内容正常记录", async ({ page }) => {
+    const readTodayContent = () =>
+      page.evaluate(() => {
+        const raw = localStorage.getItem("workday-companion-v1");
+        if (!raw) return "";
+        const d = new Date();
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        const parsed = JSON.parse(raw) as {
+          state?: { entries?: { date: string; content: string }[] };
+        };
+        return parsed.state?.entries?.find((e) => e.date === key)?.content ?? "";
+      });
+
+    const sendText = async (text: string) => {
+      await page.locator("#message").fill(text);
+      await page.getByRole("button", { name: "发送", exact: true }).click();
+      // 消息仍然出现在对话里
+      await expect(
+        page.getByTestId("conversation").getByText(text, { exact: true }),
+      ).toBeVisible({ timeout: 15000 });
+      await page.waitForTimeout(1600);
+    };
+
+    await page.goto("/today");
+    await closeCheckInIfAny(page);
+
+    // 寒暄：对话里有，原文里没有
+    await sendText("你好");
+    expect(await readTodayContent()).not.toContain("你好");
+
+    await sendText("你是谁");
+    expect(await readTodayContent()).not.toContain("你是谁");
+
+    // 具体内容：照常记录，且此前留下的空记录不会被污染
+    await sendText("今天被主管批评了");
+    const content = await readTodayContent();
+    expect(content).toContain("今天被主管批评了");
+    expect(content).not.toContain("你好");
+    expect(content).not.toContain("你是谁");
+  });
+});

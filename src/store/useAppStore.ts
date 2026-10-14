@@ -14,7 +14,7 @@ import type {
   MaterialSuggestion,
   MessageStatus,
 } from "../types";
-import { uid, now } from "../constants";
+import { isDiaryWorthy, uid, now } from "../constants";
 import { emptyData, createDemo } from "../services/demo";
 import { migrateData } from "../services/migrate";
 import { fileService } from "../services/files";
@@ -212,7 +212,8 @@ export const useAppStore = create<AppStore>()(
             },
           ],
           entries:
-            input.role === "user"
+            // 寒暄 / 测试 / 只对助手的提问仍然留在对话里，但不写进日记原文
+            input.role === "user" && isDiaryWorthy(input.content)
               ? s.entries.map((e) =>
                   e.id === input.dailyEntryId
                     ? {

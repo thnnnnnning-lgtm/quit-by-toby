@@ -132,6 +132,24 @@ export const weekday = (value: string) =>
 export const dateWithWeekday = (value: string) =>
   `${formatDate(value)} 周${weekday(value)}`;
 export const isFuture = (value: string) => value.slice(0, 10) > today();
+/**
+ * 判断一句话值不值得写进「日记原文」。
+ *
+ * 输入框同时承担「和助手说话」和「记日记」两种用途，所以寒暄、测试、
+ * 只针对助手本身的提问不该污染日记原文——它们仍然留在对话里，只是不进原文。
+ *
+ * 判定刻意保守：只有**整句话**都是寒暄/测试/对助手的提问时才排除；
+ * 只要夹带了任何具体内容（例如「你好，今天被移出项目群了」），就照常记录。
+ */
+const PURE_SMALLTALK =
+  /^(你好|您好|哈喽|哈啰|嗨|hi|hello|hey|在吗|在么|在不在|测试|test|testing|你是谁|你是哪位|你能做什么|你能干嘛|你会什么|谢谢|多谢|感谢|好的|好|嗯|哦|噢|ok|okay|收到|明白|知道了|再见|拜拜|bye)(啊|呀|呢|吧|嘛|的)?[\s!！。.？?~～、,，…]*$/i;
+
+export const isDiaryWorthy = (text: string): boolean => {
+  const value = text.trim();
+  if (!value) return false;
+  return !PURE_SMALLTALK.test(value);
+};
+
 /** 当天是否填过状态：只有心情是主入口 */
 export const hasStatus = (entry: { mood?: Mood }): boolean =>
   entry.mood !== undefined;

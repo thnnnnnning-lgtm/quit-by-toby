@@ -13,6 +13,7 @@ import {
   type StructuredTurn,
 } from "../src/services/ai";
 import { requirementsForChange } from "../src/services/materials";
+import { isDiaryWorthy } from "../src/constants";
 import { migrateData } from "../src/services/migrate";
 import type { AppData, Material, WorkEvent } from "../src/types";
 
@@ -440,5 +441,56 @@ describe("输出护栏覆盖事件标题与描述", () => {
   it("正常输出不会被误判，事件为空也不会报错", () => {
     expect(violatesTurnBoundaries(turn())).toBe(false);
     expect(violatesTurnBoundaries(turn({ event: null }))).toBe(false);
+  });
+});
+
+describe("寒暄不进日记原文", () => {
+  it("纯寒暄、测试、只对助手的提问都判为不值得记录", () => {
+    for (const text of [
+      "你好",
+      "您好！",
+      "你好…",
+      "哈喽",
+      "在吗",
+      "你是谁",
+      "你是谁啊？",
+      "你能做什么",
+      "测试",
+      "test",
+      "Hello!",
+      "谢谢",
+      "好的",
+      "嗯",
+      "  ok  ",
+    ]) {
+      expect(isDiaryWorthy(text), text).toBe(false);
+    }
+  });
+
+  it("用户自己的状态与事情照常记录", () => {
+    for (const text of [
+      "今天挺正常",
+      "工作有点累",
+      "今天被主管批评了",
+      "这个月工资还没发",
+      "今天被移出项目群了",
+    ]) {
+      expect(isDiaryWorthy(text), text).toBe(true);
+    }
+  });
+
+  it("寒暄里夹带具体内容时，仍然照常记录（不误伤）", () => {
+    for (const text of [
+      "你好，今天被移出项目群了",
+      "在吗？我想记一下今天的会议取消了",
+      "你是谁？今天主管找我谈话了",
+    ]) {
+      expect(isDiaryWorthy(text), text).toBe(true);
+    }
+  });
+
+  it("空内容不记录", () => {
+    expect(isDiaryWorthy("")).toBe(false);
+    expect(isDiaryWorthy("   ")).toBe(false);
   });
 });

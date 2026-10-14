@@ -320,7 +320,7 @@ const structuredRules = [
   "",
   "输出 JSON 结构：",
   "{",
-  '  "reply": "给用户的回应，2-3 句简体中文",',
+  '  "reply": "给用户的回应，简体中文；格式要求见下方规则 6 与 7",',
   '  "urgent": false,',
   '  "needTime": false,',
   '  "addToExistingTitle": null,',
@@ -341,7 +341,9 @@ const structuredRules = [
   "2. 时间：今天/昨天/前天按当前日期换算；说不清（如“前几天”）→ occurredAt 为 null 且 needTime=true，reply 里补问一句“大概哪一天”；没有提到时间默认用今天。",
   "3. attention：解除/辞退/强制签文件/停薪等 → priority；一般变化 → watch；积极进展 → normal。",
   "4. addToExistingTitle 仅当用户说的与「已确认事件标题」是同一件事时，原样填那个标题，否则 null。时间紧张（要求今天签、今天办理等）时 urgent=true。",
-  "5. 禁止“公司违法”“一定能赢”“必须辞职”这类表述；不给法律结论；不用 emoji、不用列表。",
+  "5. 禁止“公司违法”“一定能赢”“必须辞职”这类表述；不给法律结论；不用 emoji，也不用 Markdown 的标题与强调符号。",
+  "6. 回复要有条理：只有一个要点时可以写 1-2 句；只要涉及两个以上要点、建议或步骤，就必须用 1. 2. 3. 逐条列出，每条单独一行、一条一句话，按重要或紧急程度从高到低排。",
+  "7. 分条只允许用阿拉伯数字加英文句点（例如「1. 先保留原始记录」），不要用 -、*、#、** 或中文顿号编号；reply 内如需换行，必须使用 JSON 标准的转义换行，不要写入字面换行。",
 ].join("\n");
 
 export interface StructuredTurn {

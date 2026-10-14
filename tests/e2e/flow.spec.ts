@@ -428,3 +428,84 @@ test("DeepSeek 能把自然语言直接整理成事件草稿（自动填好标�
   await page.getByRole("button", { name: "记下来" }).first().click();
   await expect(conversation.getByText("已记入回顾")).toBeVisible();
 });
+
+test("AI 回复要求分条：提示词带编号要求，且分条内容按行渲染", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "体验演示" }).click();
+  await expect(
+    page.getByRole("heading", { name: "今天的状态" }),
+  ).toBeVisible({ timeout: 15000 });
+
+  // 写入假 Key，并拦截对话请求
+  await page.evaluate(() => {
+    const key = "workday-companion-v1";
+    const raw = JSON.parse(localStorage.getItem(key) || "{}");
+    raw.state = raw.state || {};
+    raw.state.ai = {
+      apiKey: "sk-fake",
+      model: "deepseek-flash",
+      baseUrl: "https://api.deepseek.com",
+      status: "ok",
+    };
+    localStorage.setItem(key, JSON.stringify(raw));
+  });
+
+  // 注意：一次发送会调用两次接口（回复 + 生成总结），这里把所有系统提示词都收集起来
+  const systemPrompts: string[] = [];
+  await page.route("**/chat/completions", async (route) => {
+    const body = route.request().postDataJSON() as {
+      messages?: { role: string; content: string }[];
+    };
+    systemPrompts.push(
+      body?.messages?.find((m) => m.role === "system")?.content ?? "",
+    );
+    const content = JSON.stringify({
+      reply:
+        "听起来今天很不容易，先按这几步来：\n1. 先保留原始记录\n2. 尽快就医并留存诊断\n3. 告诉一位你信任的人\n4. 必要时向相关部门求助",
+      urgent: true,
+      needTime: false,
+      addToExistingTitle: null,
+      event: null,
+    });
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ choices: [{ message: { content } }] }),
+    });
+  });
+
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "今天的状态" }),
+  ).toBeVisible({ timeout: 15000 });
+  await dismissCheckIn(page);
+
+  await page.locator("#message").fill("我手受伤了还被威胁");
+  await page.getByRole("button", { name: "发送", exact: true }).click();
+
+  const bubble = page
+    .getByTestId("conversation")
+    .locator(".bubble-assistant")
+    .last();
+  await expect(bubble).toBeVisible({ timeout: 15000 });
+
+  // 1) 发给模型的系统提示词里确实带了「多要点必须分条」的要求
+  expect(systemPrompts.some((t) => t.includes("逐条列出"))).toBe(true);
+  expect(
+    systemPrompts.some((t) => t.includes("阿拉伯数字加英文句点")),
+  ).toBe(true);
+
+  // 2) 分条内容按行渲染，不是挤成一整段
+  const lines = (await bubble.innerText())
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => /^\d\./.test(l));
+  expect(lines).toEqual([
+    "1. 先保留原始记录",
+    "2. 尽快就医并留存诊断",
+    "3. 告诉一位你信任的人",
+    "4. 必要时向相关部门求助",
+  ]);
+});
